@@ -12,18 +12,30 @@ echo "🐍 Python 버전: $PYTHON_VERSION"
 # Python 버전별 호환성 체크
 if [[ "$PYTHON_VERSION" == "3.13" ]]; then
     echo "⚠️  경고: Python 3.13이 감지되었습니다."
-    echo "   CrewAI는 Python 3.9-3.12를 지원합니다."
-    echo "   pyenv 등으로 Python 3.11 또는 3.12 사용을 권장합니다."
+    echo "   CrewAI 0.165.1은 Python 3.11-3.12를 권장합니다."
+    echo "   Python 3.11으로 가상환경을 생성합니다..."
     echo ""
+    PYTHON_CMD="python3.11"
 elif [[ "$PYTHON_VERSION" == "3.9" ]]; then
-    echo "ℹ️  Python 3.9 감지 - CrewAI 0.28.8 버전을 사용합니다."
+    echo "ℹ️  Python 3.9 감지 - Python 3.11으로 업그레이드를 권장합니다."
+    echo "   Python 3.11으로 가상환경을 생성합니다..."
     echo ""
+    PYTHON_CMD="python3.11"
+else
+    echo "✅ Python $PYTHON_VERSION - CrewAI 0.165.1 호환"
+    PYTHON_CMD="python3"
 fi
 
 # 가상환경이 없으면 생성
-if [ ! -d "venv" ]; then
+if [ ! -d ".venv" ]; then
     echo "📦 가상환경을 생성합니다..."
-    python3 -m venv .venv
+    if command -v $PYTHON_CMD &> /dev/null; then
+        echo "🐍 $PYTHON_CMD 사용"
+        $PYTHON_CMD -m venv .venv
+    else
+        echo "🐍 기본 Python 사용"
+        python3 -m venv .venv
+    fi
 fi
 
 # 가상환경 활성화
@@ -31,9 +43,9 @@ echo "🔧 가상환경을 활성화합니다..."
 source .venv/bin/activate
 
 # 의존성 설치
-echo "📋 의존성을 설치합니다..."
-pip3 install --upgrade pip
-pip3 install -r requirements.txt
+echo "📋 의존성을 설치합니다 (CrewAI 0.165.1)..."
+pip install --upgrade pip
+pip install -r requirements.txt
 
 # .env 파일 확인
 if [ ! -f ".env" ]; then
@@ -48,4 +60,4 @@ echo "🎯 FastAPI 서버를 시작합니다..."
 echo "서버 주소: http://localhost:8101"
 echo "API 문서: http://localhost:8101/docs"
 echo ""
-python3 -muvicorn main:app --host 0.0.0.0 --port 8101 --reload
+uvicorn main:app --host 0.0.0.0 --port 8101 --reload

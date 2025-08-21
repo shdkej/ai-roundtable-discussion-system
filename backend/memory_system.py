@@ -5,7 +5,6 @@ import os
 import hashlib
 from datetime import datetime
 from typing import List, Dict, Optional, Tuple
-from sentence_transformers import SentenceTransformer
 import uuid
 
 
@@ -14,8 +13,7 @@ class FAISSMemorySystem:
     
     def __init__(self, memory_dir: str = "memory_storage"):
         self.memory_dir = memory_dir
-        self.embedding_model = SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')
-        self.embedding_dim = 384  # 모델의 임베딩 차원
+        self.embedding_dim = 128  # 간단한 해시 기반 임베딩 차원
         
         # 메모리 디렉토리 생성
         os.makedirs(memory_dir, exist_ok=True)
@@ -29,6 +27,30 @@ class FAISSMemorySystem:
         self.chatroom_memories = {}  # 채팅방별 메모리
         
         self._initialize_memories()
+    
+    def _create_simple_embedding(self, text: str) -> np.ndarray:
+        """간단한 해시 기반 임베딩 생성"""
+        # 텍스트를 해시하고 고정 크기 벡터로 변환
+        text_hash = hashlib.md5(text.encode('utf-8')).hexdigest()
+        
+        # 해시를 숫자로 변환하여 임베딩 벡터 생성
+        embedding = np.array([
+            int(text_hash[i:i+2], 16) / 255.0  # 0-1 범위로 정규화
+            for i in range(0, min(len(text_hash), self.embedding_dim * 2), 2)
+        ])
+        
+        # 부족한 차원은 0으로 채움
+        if len(embedding) < self.embedding_dim:
+            embedding = np.pad(embedding, (0, self.embedding_dim - len(embedding)))
+        else:
+            embedding = embedding[:self.embedding_dim]
+            
+        # L2 정규화
+        norm = np.linalg.norm(embedding)
+        if norm > 0:
+            embedding = embedding / norm
+            
+        return embedding.reshape(1, -1).astype('float32')
     
     def _initialize_memories(self):
         """메모리 인덱스들을 초기화"""
@@ -156,8 +178,6 @@ class FAISSMemorySystem:
         """채팅방 메타데이터 업데이트"""
         metadata_path = f"{self.memory_dir}/chatrooms/{room_id}_chatroom.json"
         
-        print(f"DEBUG: _update_chatroom_metadata 호출됨 - room_id: {room_id}, participant: {participant}")
-        print(f"DEBUG: 메타데이터 파일 경로: {metadata_path}")
         
         # 기본 메타데이터 구조 정의
         default_metadata = {
@@ -170,42 +190,32 @@ class FAISSMemorySystem:
         }
         
         try:
-            print(f"DEBUG: 메타데이터 파일 읽기 시도...")
             with open(metadata_path, 'r', encoding='utf-8') as f:
                 metadata = json.load(f)
-            print(f"DEBUG: 메타데이터 파일 읽기 성공: {metadata.keys()}")
         except (FileNotFoundError, json.JSONDecodeError) as e:
-            print(f"DEBUG: 메타데이터 파일 읽기 실패: {e}, 기본값 사용")
             metadata = default_metadata.copy()
         
-        print(f"DEBUG: 메타데이터 키 확인 전: {list(metadata.keys())}")
         
         # metadata에 필요한 키들이 있는지 확인하고 없으면 기본값으로 추가
         for key, default_value in default_metadata.items():
             if key not in metadata:
-                print(f"DEBUG: 누락된 키 '{key}' 추가, 기본값: {default_value}")
                 metadata[key] = default_value
         
-        print(f"DEBUG: 메타데이터 키 확인 후: {list(metadata.keys())}")
         
         # 참석자 추가 (안전하게)
         participants_list = metadata.get("participants", [])
-        print(f"DEBUG: 현재 참석자 목록: {participants_list}")
         if participant not in participants_list:
             participants_list.append(participant)
             metadata["participants"] = participants_list
-            print(f"DEBUG: 참석자 '{participant}' 추가됨")
         
         # 메시지 카운트 증가
         metadata["message_count"] = metadata.get("message_count", 0) + 1
         metadata["last_updated"] = datetime.now().isoformat()
         
-        print(f"DEBUG: 최종 메타데이터: {metadata}")
         
         with open(metadata_path, 'w', encoding='utf-8') as f:
             json.dump(metadata, f, ensure_ascii=False, indent=2)
         
-        print(f"DEBUG: 메타데이터 파일 저장 완료")
     
     def _save_message_to_md(self, room_id: str, message_data: Dict):
         """메시지를 MD 파일로 저장"""
@@ -285,7 +295,6 @@ class MemoryIndex:
         self.name = name
         self.base_dir = base_dir
         self.embedding_dim = embedding_dim
-        self.embedding_model = SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')
         
         self.index_path = f"{base_dir}/{name}_index.faiss"
         self.metadata_path = f"{base_dir}/{name}_metadata.json"
@@ -293,15 +302,52 @@ class MemoryIndex:
         # FAISS 인덱스와 메타데이터 로드 또는 생성
         self._load_or_create_index()
     
+    def _create_simple_embedding(self, text: str) -> np.ndarray:
+        """간단한 해시 기반 임베딩 생성"""
+        # 텍스트를 해시하고 고정 크기 벡터로 변환
+        text_hash = hashlib.md5(text.encode('utf-8')).hexdigest()
+        
+        # 해시를 숫자로 변환하여 임베딩 벡터 생성
+        embedding = np.array([
+            int(text_hash[i:i+2], 16) / 255.0  # 0-1 범위로 정규화
+            for i in range(0, min(len(text_hash), self.embedding_dim * 2), 2)
+        ])
+        
+        # 부족한 차원은 0으로 채움
+        if len(embedding) < self.embedding_dim:
+            embedding = np.pad(embedding, (0, self.embedding_dim - len(embedding)))
+        else:
+            embedding = embedding[:self.embedding_dim]
+            
+        # L2 정규화
+        norm = np.linalg.norm(embedding)
+        if norm > 0:
+            embedding = embedding / norm
+            
+        return embedding.reshape(1, -1).astype('float32')
+    
     def _load_or_create_index(self):
         """FAISS 인덱스와 메타데이터 로드 또는 생성"""
-        if os.path.exists(self.index_path) and os.path.exists(self.metadata_path):
-            # 기존 인덱스 로드
-            self.index = faiss.read_index(self.index_path)
-            with open(self.metadata_path, 'r', encoding='utf-8') as f:
-                self.metadata = json.load(f)
-        else:
+        try:
+            if os.path.exists(self.index_path) and os.path.exists(self.metadata_path):
+                # 기존 인덱스 로드
+                self.index = faiss.read_index(self.index_path)
+                
+                # 차원 호환성 체크
+                if self.index.d != self.embedding_dim:
+                    print(f"⚠️ FAISS 인덱스 차원 불일치 ({self.name}): 기존={self.index.d}, 새로운={self.embedding_dim}")
+                    print(f"🔄 새로운 차원으로 인덱스 재생성...")
+                    raise ValueError("차원 불일치")
+                
+                with open(self.metadata_path, 'r', encoding='utf-8') as f:
+                    self.metadata = json.load(f)
+                print(f"✅ 기존 FAISS 인덱스 로드 완료 ({self.name}): {self.index.d}차원")
+            else:
+                raise FileNotFoundError("인덱스 파일 없음")
+                
+        except (FileNotFoundError, ValueError, Exception) as e:
             # 새 인덱스 생성
+            print(f"🆕 새 FAISS 인덱스 생성 ({self.name}): {self.embedding_dim}차원")
             self.index = faiss.IndexFlatIP(self.embedding_dim)  # Inner Product (코사인 유사도)
             self.metadata = {
                 "texts": [],
@@ -317,8 +363,7 @@ class MemoryIndex:
             data = {}
         
         # 텍스트 임베딩 생성
-        embedding = self.embedding_model.encode([text])
-        embedding = embedding / np.linalg.norm(embedding, axis=1, keepdims=True)  # 정규화
+        embedding = self._create_simple_embedding(text)
         
         # FAISS 인덱스에 추가
         self.index.add(embedding.astype('float32'))
@@ -338,8 +383,7 @@ class MemoryIndex:
             return []
         
         # 쿼리 임베딩 생성
-        query_embedding = self.embedding_model.encode([query])
-        query_embedding = query_embedding / np.linalg.norm(query_embedding, axis=1, keepdims=True)
+        query_embedding = self._create_simple_embedding(query)
         
         # 검색 수행
         top_k = min(top_k, self.metadata["count"])

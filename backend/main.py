@@ -6,8 +6,9 @@ import datetime
 import json
 import asyncio
 import os
-from chat_roundtable import ChatRoundtable, ChatMessage
-# from memory_system import FAISSMemorySystem  # 임시 비활성화
+from chat_roundtable import ChatRoundtable, ChatMessage, get_default_personas
+from personas_storage import persona_storage
+from memory_system import FAISSMemorySystem
 
 app = FastAPI()
 
@@ -86,8 +87,12 @@ manager = ConnectionManager()
 # 토론 시스템 및 메모리 시스템 인스턴스
 chat_system: Optional[ChatRoundtable] = None
 auto_discussion_task: Optional[asyncio.Task] = None
-# memory_system = FAISSMemorySystem()  # 임시 비활성화
-memory_system = None
+try:
+    memory_system = FAISSMemorySystem()
+    print("✅ 메모리 시스템 초기화 완료 (FAISS 전용, sentence-transformers 없이)")
+except Exception as e:
+    print(f"⚠️ 메모리 시스템 초기화 실패: {e}")
+    memory_system = None
 current_room_id: Optional[str] = None
 
 # 요청/응답 모델
@@ -180,6 +185,11 @@ async def start_discussion(request: StartDiscussionRequest):
     
     print(f"=== start_discussion API 호출 시작 ===")
     print(f"요청 데이터: topic={request.topic}, participants={request.participants}")
+    print(f"참가자 개수: {len(request.participants) if request.participants else 0}")
+    print(f"참가자 상세:")
+    if request.participants:
+        for i, p in enumerate(request.participants):
+            print(f"  [{i}]: '{p}' (타입: {type(p)})")
     print(f"회사 정보: {request.company_info}")
     
     # WebSocket 연결 상태 확인
@@ -241,13 +251,16 @@ async def start_discussion(request: StartDiscussionRequest):
         
         print("5. 시작 메시지를 메모리에 저장...")
         # 시작 메시지를 메모리에 저장
-        memory_system.add_message_to_chatroom(
-            current_room_id, 
-            start_msg.sender, 
-            start_msg.content, 
-            start_msg.timestamp.isoformat()
-        )
-        print("시작 메시지 메모리 저장 완료")
+        if memory_system:
+            memory_system.add_message_to_chatroom(
+                current_room_id, 
+                start_msg.sender, 
+                start_msg.content, 
+                start_msg.timestamp.isoformat()
+            )
+            print("시작 메시지 메모리 저장 완료")
+        else:
+            print("⚠️ memory_system이 None이므로 메모리 저장 건너뜀")
         
         print("6. 초기 의견 수집...")
         # 초기 의견 수집
@@ -256,35 +269,44 @@ async def start_discussion(request: StartDiscussionRequest):
         
         print("7. 초기 의견들을 메모리에 저장...")
         # 초기 의견들도 메모리에 저장
-        for i, opinion in enumerate(initial_opinions):
-            memory_system.add_message_to_chatroom(
-                current_room_id,
-                opinion.sender,
-                opinion.content,
-                opinion.timestamp.isoformat()
-            )
-            print(f"  의견 {i+1} 저장: {opinion.sender}")
-        print("초기 의견들 메모리 저장 완료")
+        if memory_system:
+            for i, opinion in enumerate(initial_opinions):
+                memory_system.add_message_to_chatroom(
+                    current_room_id,
+                    opinion.sender,
+                    opinion.content,
+                    opinion.timestamp.isoformat()
+                )
+                print(f"  의견 {i+1} 저장: {opinion.sender}")
+            print("초기 의견들 메모리 저장 완료")
+        else:
+            print("⚠️ memory_system이 None이므로 초기 의견 메모리 저장 건너뜀")
         
         print("8. 토론 주제를 공통 맥락에 저장...")
         # 토론 주제를 공통 맥락에 저장
-        memory_system.add_common_context(
-            f"토론 주제: {request.topic}",
-            {"type": "discussion_topic", "room_id": current_room_id}
-        )
-        print("토론 주제 공통 맥락 저장 완료")
+        if memory_system:
+            memory_system.add_common_context(
+                f"토론 주제: {request.topic}",
+                {"type": "discussion_topic", "room_id": current_room_id}
+            )
+            print("토론 주제 공통 맥락 저장 완료")
+        else:
+            print("⚠️ memory_system이 None이므로 토론 주제 공통 맥락 저장 건너뜀")
         
         print("9. 회사 정보를 공통 맥락에 저장...")
         # 회사 정보를 공통 맥락에 저장
-        company_context = f"회사 정보 - 규모: {request.company_info.get('company_size', '')}, " \
-                         f"산업: {request.company_info.get('industry', '')}, " \
-                         f"매출: {request.company_info.get('revenue', '')}, " \
-                         f"과제: {request.company_info.get('current_challenge', '')}"
-        memory_system.add_common_context(
-            company_context,
-            {"type": "company_info", "room_id": current_room_id}
-        )
-        print("회사 정보 공통 맥락 저장 완료")
+        if memory_system:
+            company_context = f"회사 정보 - 규모: {request.company_info.get('company_size', '')}, " \
+                             f"산업: {request.company_info.get('industry', '')}, " \
+                             f"매출: {request.company_info.get('revenue', '')}, " \
+                             f"과제: {request.company_info.get('current_challenge', '')}"
+            memory_system.add_common_context(
+                company_context,
+                {"type": "company_info", "room_id": current_room_id}
+            )
+            print("회사 정보 공통 맥락 저장 완료")
+        else:
+            print("⚠️ memory_system이 None이므로 회사 정보 공통 맥락 저장 건너뜀")
         
         print("10. 응답 데이터 준비...")
         # 모든 메시지 준비
@@ -321,19 +343,48 @@ async def start_discussion(request: StartDiscussionRequest):
 async def start_auto_discussion():
     global auto_discussion_task
     
+    print("🔄 자동 토론 시작 요청 받음")
+    
     # WebSocket 연결 상태 확인
     connection_check = check_websocket_connection()
     if not connection_check["success"]:
+        print(f"❌ WebSocket 연결 없음: {connection_check}")
         return connection_check
     
     if not chat_system:
+        print("❌ chat_system이 None입니다")
         return {"success": False, "error": "토론이 시작되지 않았습니다."}
+    
+    print(f"🔍 현재 활성 에이전트 수: {len(chat_system.active_agents) if hasattr(chat_system, 'active_agents') else 0}")
+    
+    # active_agents 확인 및 초기화
+    if not hasattr(chat_system, 'active_agents') or not chat_system.active_agents:
+        print("⚠️ active_agents가 비어있음. 기본 에이전트로 설정...")
+        chat_system.active_agents = [
+            chat_system.design_agent, 
+            chat_system.sales_agent, 
+            chat_system.production_agent,
+            chat_system.marketing_agent,
+            chat_system.it_agent
+        ]
+        print(f"✅ 기본 에이전트 설정 완료: {len(chat_system.active_agents)}명")
     
     # 자동 토론 시작
     start_msg = chat_system.start_auto_discussion()
+    print(f"✅ 자동 토론 시작됨: {start_msg.content}")
+    
+    # 기존 자동 토론 태스크가 있으면 취소
+    if auto_discussion_task and not auto_discussion_task.done():
+        print("🛑 기존 자동 토론 태스크 취소 중...")
+        auto_discussion_task.cancel()
+        try:
+            await auto_discussion_task
+        except asyncio.CancelledError:
+            pass
     
     # 자동 토론 태스크 시작
     auto_discussion_task = asyncio.create_task(auto_discussion_loop())
+    print("🚀 자동 토론 루프 시작됨")
     
     await manager.broadcast({
         "type": "message",
@@ -506,7 +557,7 @@ async def send_message(request: UserMessageRequest):
             print(f"사용자 메시지 생성: {user_msg.sender} - {user_msg.content}")
             
             # 사용자 메시지를 메모리에 저장
-            if current_room_id:
+            if current_room_id and memory_system:
                 memory_system.add_message_to_chatroom(
                     current_room_id,
                     user_msg.sender,
@@ -519,7 +570,7 @@ async def send_message(request: UserMessageRequest):
             print(f"토론 재개 메시지 생성: {continue_msg.sender} - {continue_msg.content}")
             
             # 응답 메시지도 메모리에 저장
-            if current_room_id:
+            if current_room_id and memory_system:
                 memory_system.add_message_to_chatroom(
                     current_room_id,
                     continue_msg.sender,
@@ -556,7 +607,7 @@ async def send_message(request: UserMessageRequest):
             print(f"토론 응답 생성: {response.sender} - {response.content}")
             
             # 응답을 메모리에 저장
-            if current_room_id:
+            if current_room_id and memory_system:
                 memory_system.add_message_to_chatroom(
                     current_room_id,
                     response.sender,
@@ -827,10 +878,13 @@ async def switch_chatroom(request: SwitchChatroomRequest):
 @app.get("/api/personas")
 async def get_personas():
     """현재 에이전트들의 페르소나 정보 반환"""
-    if not chat_system:
-        return {"success": False, "error": "토론이 시작되지 않았습니다."}
-    
     try:
+        if not chat_system:
+            # 토론이 시작되지 않았을 때는 저장된 페르소나 반환
+            saved_personas = persona_storage.load_personas()
+            return {"success": True, "personas": saved_personas}
+        
+        # 토론이 시작된 경우 현재 에이전트들의 페르소나 반환
         personas = {}
         agent_map = {
             "디자인팀": chat_system.design_agent,
@@ -855,58 +909,70 @@ async def get_personas():
 @app.post("/api/personas/update")
 async def update_persona(request: UpdatePersonaRequest):
     """특정 에이전트의 페르소나 업데이트"""
-    if not chat_system:
-        return {"success": False, "error": "토론이 시작되지 않았습니다."}
-    
     try:
-        agent_map = {
-            "디자인팀": chat_system.design_agent,
-            "영업팀": chat_system.sales_agent,
-            "생산팀": chat_system.production_agent,
-            "마케팅팀": chat_system.marketing_agent,
-            "IT팀": chat_system.it_agent,
-            "진행자": chat_system.moderator
-        }
+        # 현재 저장된 페르소나 로드
+        current_personas = persona_storage.load_personas()
         
-        if request.agent_name not in agent_map:
+        if request.agent_name not in current_personas:
             return {"success": False, "error": f"존재하지 않는 에이전트: {request.agent_name}"}
         
-        agent = agent_map[request.agent_name]
-        
-        # 업데이트할 필드만 변경
+        # 페르소나 업데이트
         if request.role is not None:
-            agent.role = request.role
+            current_personas[request.agent_name]["role"] = request.role
         if request.goal is not None:
-            agent.goal = request.goal
+            current_personas[request.agent_name]["goal"] = request.goal
         if request.backstory is not None:
-            agent.backstory = request.backstory
+            current_personas[request.agent_name]["backstory"] = request.backstory
+        
+        # 파일에 저장
+        if not persona_storage.save_personas(current_personas):
+            return {"success": False, "error": "페르소나 저장에 실패했습니다."}
+        
+        # 현재 토론이 진행 중이면 해당 에이전트도 업데이트
+        if chat_system:
+            agent_map = {
+                "디자인팀": chat_system.design_agent,
+                "영업팀": chat_system.sales_agent,
+                "생산팀": chat_system.production_agent,
+                "마케팅팀": chat_system.marketing_agent,
+                "IT팀": chat_system.it_agent,
+                "진행자": chat_system.moderator
+            }
+            
+            if request.agent_name in agent_map:
+                agent = agent_map[request.agent_name]
+                if request.role is not None:
+                    agent.role = request.role
+                if request.goal is not None:
+                    agent.goal = request.goal
+                if request.backstory is not None:
+                    agent.backstory = request.backstory
         
         # 업데이트된 페르소나 정보 브로드캐스트
         await manager.broadcast({
             "type": "persona_updated",
             "data": {
                 "agent_name": request.agent_name,
-                "persona": {
-                    "role": agent.role,
-                    "goal": agent.goal,
-                    "backstory": agent.backstory
-                }
+                "persona": current_personas[request.agent_name]
             }
         })
         
-        return {"success": True, "message": f"{request.agent_name} 페르소나가 업데이트되었습니다."}
+        return {"success": True, "message": f"{request.agent_name} 페르소나가 업데이트되고 저장되었습니다."}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
 @app.post("/api/personas/reset")
 async def reset_personas():
     """모든 에이전트 페르소나를 기본값으로 리셋"""
-    if not chat_system:
-        return {"success": False, "error": "토론이 시작되지 않았습니다."}
-    
     try:
-        # 새로운 에이전트들을 다시 설정
-        chat_system.setup_agents()
+        # 저장된 커스텀 페르소나 삭제
+        if not persona_storage.reset_personas():
+            return {"success": False, "error": "페르소나 리셋에 실패했습니다."}
+        
+        # 현재 토론이 진행 중이면 에이전트들도 리셋
+        if chat_system:
+            # 새로운 에이전트들을 다시 설정
+            chat_system.setup_agents()
         
         # 활성 에이전트 목록 갱신 (기존 참여자 기준으로)
         if hasattr(chat_system, 'active_agents') and chat_system.active_agents:
@@ -941,25 +1007,32 @@ async def reset_personas():
 
 # 자동 토론 루프
 async def auto_discussion_loop():
+    print("🔄 자동 토론 루프 시작")
     try:
+        loop_count = 0
         while chat_system and chat_system.auto_discussion_enabled:
-            # 더 빠른 체크를 위해 0.5초 간격으로 상태 확인
-            for _ in range(6):  # 3초 총 대기를 위해 0.5초씩 6번
+            loop_count += 1
+            
+            # CrewAI 응답 생성을 위한 충분한 간격 제공 (5초)
+            for i in range(10):  # 5초 총 대기를 위해 0.5초씩 10번
                 await asyncio.sleep(0.5)
                 if not chat_system or not chat_system.auto_discussion_enabled:
-                    print("자동 토론 중지 신호 감지됨")
+                    print(f"🛑 자동 토론 중지 신호 감지됨 (대기 중 {i+1}/10)")
                     return
             
             if not chat_system.auto_discussion_enabled:
+                print("🛑 자동 토론이 비활성화됨")
                 break
             
             # WebSocket 연결 상태 확인
             if not manager.has_connected_clients():
-                print("자동 토론 중단: WebSocket 클라이언트가 연결되지 않음")
+                print("⚠️ 자동 토론 중단: WebSocket 클라이언트가 연결되지 않음")
                 # 자동 토론 일시정지
                 if chat_system:
                     chat_system.auto_discussion_enabled = False
                 break
+            
+            print(f"✅ WebSocket 클라이언트 연결됨: {len(manager.active_connections)}개")
             
             # 콜백 함수 정의
             async def broadcast_callback(event_type, data):
@@ -984,7 +1057,7 @@ async def auto_discussion_loop():
                         print("typing_stop 브로드캐스트 실패")
                 elif event_type == "message":
                     # 메시지를 메모리에 저장
-                    if current_room_id and hasattr(data, 'sender'):
+                    if current_room_id and hasattr(data, 'sender') and memory_system:
                         memory_system.add_message_to_chatroom(
                             current_room_id,
                             data.sender,
@@ -1001,8 +1074,9 @@ async def auto_discussion_loop():
             
             # 중지 신호 재확인
             if not chat_system or not chat_system.auto_discussion_enabled:
-                print("자동 토론 중지됨 - 응답 생성 전")
+                print("🛑 자동 토론 중지됨 - 응답 생성 전")
                 break
+            
             
             # 비동기 응답 생성 (실시간 스트리밍) - 취소 가능하게 함
             try:
@@ -1011,18 +1085,25 @@ async def auto_discussion_loop():
                 )
                 response = await asyncio.wait_for(response_task, timeout=30.0)
                 
+                if response:
+                    print(f"✅ AI 응답 생성 완료: {response.sender if hasattr(response, 'sender') else 'Unknown'}")
+                else:
+                    print("⚠️ AI 응답이 None입니다")
+                
                 if not chat_system.auto_discussion_enabled:
-                    print("자동 토론 중지됨 - 응답 생성 후")
+                    print("🛑 자동 토론 중지됨 - 응답 생성 후")
                     break
                     
             except asyncio.TimeoutError:
-                print("자동 응답 생성 타임아웃")
+                print("⏰ 자동 응답 생성 타임아웃 (30초)")
                 continue
             except asyncio.CancelledError:
-                print("자동 응답 생성 취소됨")
+                print("🛑 자동 응답 생성 취소됨")
                 break
             except Exception as e:
-                print(f"자동 응답 생성 오류: {e}")
+                print(f"❌ 자동 응답 생성 오류: {e}")
+                import traceback
+                traceback.print_exc()
                 continue
             
             if response:
@@ -1035,10 +1116,14 @@ async def auto_discussion_loop():
                     break
                     
     except asyncio.CancelledError:
-        # 태스크가 취소된 경우
+        print("🛑 자동 토론 루프가 취소되었습니다")
         pass
     except Exception as e:
-        print(f"자동 토론 루프 오류: {e}")
+        print(f"❌ 자동 토론 루프 오류: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        print("🏁 자동 토론 루프 종료됨")
 
 @app.get("/api/websocket/status")
 async def get_websocket_status():
@@ -1052,6 +1137,32 @@ async def get_websocket_status():
         "connection_count": connection_count,
         "active_connections": len(manager.active_connections)
     }
+
+@app.get("/api/debug/auto_discussion")
+async def debug_auto_discussion():
+    """자동 토론 상태 디버깅 엔드포인트"""
+    global auto_discussion_task
+    
+    debug_info = {
+        "chat_system_exists": chat_system is not None,
+        "auto_discussion_enabled": chat_system.auto_discussion_enabled if chat_system else False,
+        "active_agents_count": len(chat_system.active_agents) if chat_system and hasattr(chat_system, 'active_agents') else 0,
+        "active_agents_roles": [agent.role for agent in chat_system.active_agents] if chat_system and hasattr(chat_system, 'active_agents') else [],
+        "auto_discussion_task_exists": auto_discussion_task is not None,
+        "auto_discussion_task_done": auto_discussion_task.done() if auto_discussion_task else None,
+        "websocket_connections": len(manager.active_connections),
+        "has_websocket_connections": manager.has_connected_clients()
+    }
+    
+    if chat_system:
+        debug_info.update({
+            "current_topic": getattr(chat_system, 'current_topic', ''),
+            "discussion_state": getattr(chat_system, 'discussion_state', ''),
+            "current_speaker": getattr(chat_system.current_speaker, 'role', None) if hasattr(chat_system, 'current_speaker') and chat_system.current_speaker else None,
+            "next_speaker_queue_length": len(chat_system.next_speaker_queue) if hasattr(chat_system, 'next_speaker_queue') else 0
+        })
+    
+    return debug_info
 
 # WebSocket 엔드포인트
 @app.websocket("/ws")

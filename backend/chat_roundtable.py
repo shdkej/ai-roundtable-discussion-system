@@ -11,6 +11,89 @@ load_dotenv()
 # OpenAI API 키 설정
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
+# 기본 페르소나 정의 함수
+def get_default_personas():
+    """기본 페르소나 정의 반환"""
+    return {
+        "진행자": {
+            "role": "토론 진행자",
+            "goal": "토론을 원활하게 진행하고 각 팀의 의견을 조율하여 결론을 도출합니다.",
+            "backstory": """
+            당신은 KS의 토론 진행자로서 각 팀의 전문적 의견을 종합하여 실행 가능한 결론을 도출하는 전문가입니다.
+            채팅 형식으로 실시간 소통이 가능하며, 사용자의 질문이나 의견에 즉시 응답할 수 있습니다.
+            
+            **응답 원칙:**
+            - 모든 응답은 한국어로 작성
+            - 간결하고 명확한 답변
+            - 필요시 추가 설명 요청 가능
+            - 실시간 대화 가능
+            
+            **도구 활용:**
+            - 토론 주제와 관련된 최신 정보가 필요할 때 WebSearchTool을 활용하여 웹 검색을 수행하세요
+            - 검색 결과를 바탕으로 더욱 정확하고 최신의 정보를 제공하세요
+            """
+        },
+        "디자인팀": {
+            "role": "디자인팀 팀장 김창의",
+            "goal": "UI/UX 관점에서 사용자 중심의 혁신적인 디자인 솔루션을 제시합니다.",
+            "backstory": """
+            당신은 KS의 디자인팀을 이끄는 팀장 김창의입니다. 
+            채팅 형식으로 실시간 소통이 가능하며, 디자인 관련 질문에 즉시 답변할 수 있습니다.
+            
+            **응답 형식**: "디자인팀 김창의: [내용]" 형태로 한국어로 작성
+            **전문 분야**: UI/UX, 사용자 경험, 디자인 트렌드, 브랜딩
+            
+            **도구 활용:**
+            - 최신 디자인 트렌드나 UI/UX 동향이 필요할 때 WebSearchTool을 활용하여 웹 검색을 수행하세요
+            - 경쟁사 사례나 업계 동향을 파악해야 할 때 웹 검색을 통해 최신 정보를 수집하세요
+            """
+        },
+        "영업팀": {
+            "role": "영업팀 팀장 박매출",
+            "goal": "시장 분석과 고객 니즈를 바탕으로 실질적인 매출 전략을 제시합니다.",
+            "backstory": """
+            당신은 KS의 영업팀을 이끄는 팀장 박매출입니다.
+            채팅 형식으로 실시간 소통이 가능하며, 영업/마케팅 관련 질문에 즉시 답변할 수 있습니다.
+            
+            **응답 형식**: "영업팀 박매출: [내용]" 형태로 한국어로 작성
+            **전문 분야**: 시장 분석, 고객 관리, 매출 전략, 경쟁사 분석
+            """
+        },
+        "생산팀": {
+            "role": "생산팀 팀장 이현실",
+            "goal": "생산 효율성과 품질 관리 관점에서 실현 가능한 솔루션을 제시합니다.",
+            "backstory": """
+            당신은 KS의 생산팀을 이끄는 팀장 이현실입니다.
+            채팅 형식으로 실시간 소통이 가능하며, 생산/제조 관련 질문에 즉시 답변할 수 있습니다.
+            
+            **응답 형식**: "생산팀 이현실: [내용]" 형태로 한국어로 작성
+            **전문 분야**: 생산 계획, 품질 관리, 원가 분석, 공정 개선
+            """
+        },
+        "마케팅팀": {
+            "role": "마케팅팀 팀장 최홍보",
+            "goal": "브랜드 전략과 고객 경험 관점에서 마케팅 솔루션을 제시합니다.",
+            "backstory": """
+            당신은 KS의 마케팅팀을 이끄는 팀장 최홍보입니다.
+            채팅 형식으로 실시간 소통이 가능하며, 마케팅/브랜딩 관련 질문에 즉시 답변할 수 있습니다.
+            
+            **응답 형식**: "마케팅팀 최홍보: [내용]" 형태로 한국어로 작성
+            **전문 분야**: 브랜드 전략, 디지털 마케팅, 고객 경험, 캠페인 기획
+            """
+        },
+        "IT팀": {
+            "role": "IT팀 팀장 박테크",
+            "goal": "기술적 실현 가능성과 시스템 관점에서 IT 솔루션을 제시합니다.",
+            "backstory": """
+            당신은 KS의 IT팀을 이끄는 팀장 박테크입니다.
+            채팅 형식으로 실시간 소통이 가능하며, IT/기술 관련 질문에 즉시 답변할 수 있습니다.
+            
+            **응답 형식**: "IT팀 박테크: [내용]" 형태로 한국어로 작성
+            **전문 분야**: 시스템 아키텍처, 디지털 전환, 데이터 분석, 기술 트렌드
+            """
+        }
+    }
+
 # 커스텀 웹 검색 도구 구현
 from crewai.tools import tool
 
@@ -107,90 +190,18 @@ class ChatRoundtable:
         self.next_speaker_queue = []  # 다음 발언자 대기열
         self.user_intervention_pending = False  # 사용자 개입 대기 상태
         self.discussion_rounds = 0  # 토론 라운드 수
+        self.used_responses = {}  # 각 에이전트가 이미 사용한 응답 추적
         self.setup_agents()
     
     def setup_agents(self, custom_personas=None):
         """에이전트 설정"""
-        # 기본 페르소나 정의
-        default_personas = {
-            "진행자": {
-                "role": "토론 진행자",
-                "goal": "토론을 원활하게 진행하고 각 팀의 의견을 조율하여 결론을 도출합니다.",
-                "backstory": """
-                당신은 KS의 토론 진행자로서 각 팀의 전문적 의견을 종합하여 실행 가능한 결론을 도출하는 전문가입니다.
-                채팅 형식으로 실시간 소통이 가능하며, 사용자의 질문이나 의견에 즉시 응답할 수 있습니다.
-                
-                **응답 원칙:**
-                - 모든 응답은 한국어로 작성
-                - 간결하고 명확한 답변
-                - 필요시 추가 설명 요청 가능
-                - 실시간 대화 가능
-                
-                **도구 활용:**
-                - 토론 주제와 관련된 최신 정보가 필요할 때 WebSearchTool을 활용하여 웹 검색을 수행하세요
-                - 검색 결과를 바탕으로 더욱 정확하고 최신의 정보를 제공하세요
-                """
-            },
-            "디자인팀": {
-                "role": "디자인팀 팀장 김창의",
-                "goal": "UI/UX 관점에서 사용자 중심의 혁신적인 디자인 솔루션을 제시합니다.",
-                "backstory": """
-                당신은 KS의 디자인팀을 이끄는 팀장 김창의입니다. 
-                채팅 형식으로 실시간 소통이 가능하며, 디자인 관련 질문에 즉시 답변할 수 있습니다.
-                
-                **응답 형식**: "디자인팀 김창의: [내용]" 형태로 한국어로 작성
-                **전문 분야**: UI/UX, 사용자 경험, 디자인 트렌드, 브랜딩
-                
-                **도구 활용:**
-                - 최신 디자인 트렌드나 UI/UX 동향이 필요할 때 WebSearchTool을 활용하여 웹 검색을 수행하세요
-                - 경쟁사 사례나 업계 동향을 파악해야 할 때 웹 검색을 통해 최신 정보를 수집하세요
-                """
-            },
-            "영업팀": {
-                "role": "영업팀 팀장 박매출",
-                "goal": "시장 분석과 고객 니즈를 바탕으로 실질적인 매출 전략을 제시합니다.",
-                "backstory": """
-                당신은 KS의 영업팀을 이끄는 팀장 박매출입니다.
-                채팅 형식으로 실시간 소통이 가능하며, 영업/마케팅 관련 질문에 즉시 답변할 수 있습니다.
-                
-                **응답 형식**: "영업팀 박매출: [내용]" 형태로 한국어로 작성
-                **전문 분야**: 시장 분석, 고객 관리, 매출 전략, 경쟁사 분석
-                """
-            },
-            "생산팀": {
-                "role": "생산팀 팀장 이현실",
-                "goal": "생산 효율성과 품질 관리 관점에서 실현 가능한 솔루션을 제시합니다.",
-                "backstory": """
-                당신은 KS의 생산팀을 이끄는 팀장 이현실입니다.
-                채팅 형식으로 실시간 소통이 가능하며, 생산/제조 관련 질문에 즉시 답변할 수 있습니다.
-                
-                **응답 형식**: "생산팀 이현실: [내용]" 형태로 한국어로 작성
-                **전문 분야**: 생산 계획, 품질 관리, 원가 분석, 공정 개선
-                """
-            },
-            "마케팅팀": {
-                "role": "마케팅팀 팀장 최홍보",
-                "goal": "브랜드 전략과 고객 경험 관점에서 마케팅 솔루션을 제시합니다.",
-                "backstory": """
-                당신은 KS의 마케팅팀을 이끄는 팀장 최홍보입니다.
-                채팅 형식으로 실시간 소통이 가능하며, 마케팅/브랜딩 관련 질문에 즉시 답변할 수 있습니다.
-                
-                **응답 형식**: "마케팅팀 최홍보: [내용]" 형태로 한국어로 작성
-                **전문 분야**: 브랜드 전략, 디지털 마케팅, 고객 경험, 캠페인 기획
-                """
-            },
-            "IT팀": {
-                "role": "IT팀 팀장 박테크",
-                "goal": "기술적 실현 가능성과 시스템 관점에서 IT 솔루션을 제시합니다.",
-                "backstory": """
-                당신은 KS의 IT팀을 이끄는 팀장 박테크입니다.
-                채팅 형식으로 실시간 소통이 가능하며, IT/기술 관련 질문에 즉시 답변할 수 있습니다.
-                
-                **응답 형식**: "IT팀 박테크: [내용]" 형태로 한국어로 작성
-                **전문 분야**: 시스템 아키텍처, 디지털 전환, 데이터 분석, 기술 트렌드
-                """
-            }
-        }
+        # 기본 페르소나 정의 (저장된 커스텀 페르소나가 있으면 로드)
+        try:
+            from personas_storage import persona_storage
+            default_personas = persona_storage.load_personas()
+        except ImportError:
+            # personas_storage를 import할 수 없는 경우 기본 페르소나 사용
+            default_personas = get_default_personas()
         
         # 커스텀 페르소나가 제공된 경우 기본값과 병합
         if custom_personas:
@@ -222,7 +233,8 @@ class ChatRoundtable:
             goal=design_persona["goal"],
             backstory=design_persona["backstory"],
             verbose=True,
-            tools=[web_search_tool]
+            tools=[web_search_tool],
+            llm=llm
         )
 
         # 영업팀 에이전트  
@@ -232,7 +244,8 @@ class ChatRoundtable:
             goal=sales_persona["goal"],
             backstory=sales_persona["backstory"],
             verbose=True,
-            tools=[web_search_tool]
+            tools=[web_search_tool],
+            llm=llm
         )
 
         # 생산팀 에이전트
@@ -242,7 +255,8 @@ class ChatRoundtable:
             goal=production_persona["goal"],
             backstory=production_persona["backstory"],
             verbose=True,
-            tools=[web_search_tool]
+            tools=[web_search_tool],
+            llm=llm
         )
 
         # 마케팅팀 에이전트
@@ -252,7 +266,8 @@ class ChatRoundtable:
             goal=marketing_persona["goal"],
             backstory=marketing_persona["backstory"],
             verbose=True,
-            tools=[web_search_tool]
+            tools=[web_search_tool],
+            llm=llm
         )
 
         # IT팀 에이전트
@@ -262,7 +277,8 @@ class ChatRoundtable:
             goal=it_persona["goal"],
             backstory=it_persona["backstory"],
             verbose=True,
-            tools=[web_search_tool]
+            tools=[web_search_tool],
+            llm=llm
         )
 
     def get_agent_by_name(self, name: str):
@@ -300,31 +316,41 @@ class ChatRoundtable:
             
             self.discussion_state = "discussing"
             
+            # 새 토론 시작시 사용된 응답 초기화
+            self.used_responses = {}
+            
             # 참여 에이전트 설정
             if participants:
                 print(f"참가자 목록: {participants}")
                 self.active_agents = []
                 for participant in participants:
-                    if "디자인" in participant:
+                    print(f"참가자 매칭 시도: '{participant}'")
+                    # 이름 기반 매칭
+                    if participant == "김창의" or "창의" in participant or "디자인" in participant or "Design" in participant:
                         self.active_agents.append(self.design_agent)
                         print(f"디자인 에이전트 추가: {self.design_agent.role}")
-                    elif "영업" in participant:
+                    elif participant == "박매출" or "매출" in participant or "영업" in participant or "Sales" in participant:
                         self.active_agents.append(self.sales_agent)
                         print(f"영업 에이전트 추가: {self.sales_agent.role}")
-                    elif "생산" in participant:
+                    elif participant == "이현실" or "현실" in participant or "생산" in participant or "Production" in participant:
                         self.active_agents.append(self.production_agent)
                         print(f"생산 에이전트 추가: {self.production_agent.role}")
-                    elif "마케팅" in participant:
+                    elif participant == "최홍보" or "홍보" in participant or "마케팅" in participant or "Marketing" in participant:
                         self.active_agents.append(self.marketing_agent)
                         print(f"마케팅 에이전트 추가: {self.marketing_agent.role}")
-                    elif "IT" in participant:
+                    elif participant == "정기술" or "기술" in participant or "IT" in participant:
                         self.active_agents.append(self.it_agent)
                         print(f"IT 에이전트 추가: {self.it_agent.role}")
+                    else:
+                        print(f"⚠️ 매칭되지 않은 참가자: '{participant}'")
             else:
                 print("기본 에이전트 사용")
-                self.active_agents = [self.design_agent, self.sales_agent, self.production_agent]
+                self.active_agents = [self.design_agent, self.sales_agent, self.production_agent, self.marketing_agent, self.it_agent]
             
             print(f"최종 활성 에이전트 수: {len(self.active_agents)}")
+            print("최종 활성 에이전트 목록:")
+            for i, agent in enumerate(self.active_agents):
+                print(f"  [{i}]: {agent.role}")
             
             # 시작 메시지
             start_msg = ChatMessage(
@@ -1003,59 +1029,41 @@ class ChatRoundtable:
     async def generate_auto_response_async(self, callback=None):
         """비동기적으로 자동 응답 생성 - 실시간 스트리밍 지원"""
         if not self.auto_discussion_enabled:
+            print("❌ 자동 토론이 비활성화됨")
             return None
         
         next_speaker = self.get_next_speaker()
         
         # next_speaker가 None인 경우 처리
         if not next_speaker:
-            print("오류: 다음 발언자를 찾을 수 없습니다.")
+            print("❌ 다음 발언자를 찾을 수 없습니다.")
             return None
+        
+        print(f"🎤 다음 발언자: {next_speaker.role}")
         
         # 즉시 타이핑 시작 알림
         if callback:
             await callback("typing_start", {"speaker": next_speaker.role})
         
         try:
-            # 빠른 응답을 위한 간소화된 프롬프트
-            import random
-            quick_responses = self._get_quick_responses(next_speaker)
+            # CrewAI 에이전트를 사용한 실제 AI 응답 생성
+            response_content = self._generate_crewai_response(next_speaker)
             
-            # 실제 AI 응답 생성 (별도 쓰레드에서)
-            import asyncio
-            import threading
+            response_msg = ChatMessage(
+                sender=next_speaker.role,
+                content=response_content
+            )
             
-            def generate_full_response():
-                # 실행 전 마지막 체크
-                if not self.auto_discussion_enabled:
-                    return None
-                return self.generate_auto_response()
+            self.chat_history.append(response_msg)
+            self.discussion_rounds += 1
             
-            # 즉시 간단한 응답 먼저 전송
-            if random.random() < 0.3:  # 30% 확률로 빠른 응답
-                quick_response = random.choice(quick_responses)
-                response_msg = ChatMessage(
-                    sender=next_speaker.role,
-                    content=quick_response
-                )
-                self.chat_history.append(response_msg)
-                self.discussion_rounds += 1
-                
-                if callback:
-                    await callback("typing_stop", {})
-                    await callback("message", response_msg)
-                
-                return response_msg
-            else:
-                # 완전한 AI 응답 생성
-                loop = asyncio.get_event_loop()
-                response_msg = await loop.run_in_executor(None, generate_full_response)
-                
-                if callback:
-                    await callback("typing_stop", {})
-                    await callback("message", response_msg)
-                
-                return response_msg
+            print(f"✅ 응답 생성 완료: {next_speaker.role}")
+            
+            if callback:
+                await callback("typing_stop", {})
+                await callback("message", response_msg)
+            
+            return response_msg
                 
         except Exception as e:
             print(f"자동 응답 생성 오류: {e}")
@@ -1138,6 +1146,176 @@ class ChatRoundtable:
             f.write(markdown_content)
         
         return filename
+    
+    def _generate_role_specific_response(self, agent):
+        """에이전트 역할에 맞는 특화된 응답 생성 (중복 방지)"""
+        import random
+        
+        # 현재 토론 주제와 컨텍스트 정보 활용
+        topic = getattr(self, 'current_topic', '새로운 프로젝트')
+        round_num = self.discussion_rounds
+        
+        # 에이전트별 사용된 응답 추적 초기화
+        if agent.role not in self.used_responses:
+            self.used_responses[agent.role] = set()
+        
+        # 에이전트별 특화된 응답 템플릿
+        responses = {
+            "디자인 전문가": [
+                f"디자인 관점에서 보면, {topic}의 사용자 인터페이스는 직관적이고 접근성이 좋아야 합니다. 특히 시각적 일관성과 브랜드 아이덴티티를 고려해야 해요.",
+                f"UX/UI 설계 시 고려해야 할 점은 사용자 여정(User Journey)입니다. {topic}에서 사용자가 어떤 단계를 거쳐 목표를 달성하는지 분석이 필요합니다.",
+                f"디자인 시스템 구축이 중요합니다. {topic}의 일관된 브랜드 경험을 위해 컬러, 타이포그래피, 컴포넌트 가이드라인을 정립해야 합니다.",
+                f"사용자 중심 디자인(Human-Centered Design)이 핵심입니다. {topic} 사용자들의 니즈와 페인포인트를 정확히 파악한 후 솔루션을 제시해야 해요.",
+            ],
+            "영업 전문가": [
+                f"시장에서 {topic}의 경쟁력을 확보하려면 차별화된 가치 제안이 필요합니다. 고객이 왜 우리 제품을 선택해야 하는지 명확한 메시지가 있어야 해요.",
+                f"고객 세분화(Customer Segmentation) 전략이 중요합니다. {topic}의 타겟 고객층을 정확히 정의하고 각각에 맞는 영업 접근법을 준비해야 합니다.",
+                f"매출 목표 달성을 위한 단계별 전략이 필요해요. {topic}의 시장 진입부터 확장까지, 각 단계별 KPI와 실행 계획을 세워야 합니다.",
+                f"고객 관계 관리(CRM) 시스템을 통해 {topic} 잠재고객의 구매 여정을 체계적으로 관리해야 합니다. 리드 생성부터 계약 체결까지 전 과정을 추적해야 해요.",
+            ],
+            "생산 전문가": [
+                f"생산 효율성 측면에서 {topic}의 제조 공정을 최적화해야 합니다. 품질 관리와 원가 절감의 균형을 찾는 것이 핵심이에요.",
+                f"공급망 관리(SCM)가 중요합니다. {topic}에 필요한 원자재와 부품의 안정적 조달과 재고 최적화 방안을 구축해야 합니다.",
+                f"품질 보증(QA) 시스템을 구축해야 해요. {topic}의 품질 기준을 설정하고, 생산 전 과정에서 품질 검증 체계를 운영해야 합니다.",
+                f"생산 스케줄링과 용량 계획이 필요합니다. {topic}의 수요 예측을 바탕으로 효율적인 생산 계획을 수립해야 합니다.",
+            ],
+            "마케팅 전문가": [
+                f"브랜드 포지셔닝 전략이 핵심입니다. {topic}이 시장에서 어떤 이미지와 가치로 인식되기를 원하는지 명확히 정의해야 해요.",
+                f"통합 마케팅 커뮤니케이션(IMC) 접근이 필요합니다. {topic}의 메시지를 다양한 채널을 통해 일관되게 전달해야 합니다.",
+                f"디지털 마케팅 전략을 강화해야 해요. {topic}의 온라인 가시성을 높이고, SEO, 소셜미디어, 콘텐츠 마케팅을 통합적으로 운영해야 합니다.",
+                f"고객 데이터 분석을 통한 개인화 마케팅이 중요합니다. {topic} 사용자들의 행동 패턴을 분석하여 맞춤형 캠페인을 설계해야 해요.",
+            ],
+            "IT 전문가": [
+                f"기술 아키텍처 설계가 중요합니다. {topic}의 확장성과 안정성을 고려한 시스템 구조를 설계해야 합니다.",
+                f"보안 체계 구축이 필수입니다. {topic}의 데이터 보호와 사이버 보안 위협에 대응할 수 있는 다층 보안 시스템이 필요해요.",
+                f"클라우드 인프라 전략을 수립해야 합니다. {topic}의 비용 효율성과 성능을 동시에 확보할 수 있는 클라우드 솔루션을 선택해야 해요.",
+                f"데이터 관리 및 분석 시스템이 핵심입니다. {topic}에서 생성되는 데이터를 효과적으로 수집, 저장, 분석할 수 있는 인프라를 구축해야 합니다.",
+            ]
+        }
+        
+        # 해당 역할의 응답이 없으면 일반적인 응답 사용
+        role_responses = responses.get(agent.role, [
+            f"{agent.role} 관점에서 {topic}에 대해 전문적인 의견을 제시하겠습니다.",
+            f"우리 분야의 경험을 바탕으로 {topic}의 실행 가능성을 검토해보겠습니다.",
+            f"{topic}와 관련된 중요한 고려사항들을 말씀드리겠습니다.",
+        ])
+        
+        # 아직 사용하지 않은 응답들만 필터링
+        available_responses = [r for r in role_responses if r not in self.used_responses[agent.role]]
+        
+        # 모든 응답을 사용했다면 리셋 (새로운 라운드 시작)
+        if not available_responses:
+            self.used_responses[agent.role].clear()
+            available_responses = role_responses
+        
+        # 응답 선택 (한 번만)
+        selected_response = random.choice(available_responses)
+        
+        # 선택된 응답을 사용된 응답에 추가
+        self.used_responses[agent.role].add(selected_response)
+        
+        # 토론 진행 단계에 따른 응답 스타일 조정 (선택적)
+        if round_num <= 2:
+            # 초기 단계: 그대로 사용
+            base_response = selected_response
+        elif round_num <= 5:
+            # 중간 단계: 약간의 스타일 조정 (하지만 너무 획일적이지 않게)
+            if "고려해야" in selected_response and round_num % 2 == 0:
+                base_response = selected_response.replace("고려해야", "구체적으로 실행해야")
+            else:
+                base_response = selected_response
+        else:
+            # 후반 단계: 결론 지향적 스타일로 약간 조정
+            if "필요합니다" in selected_response and round_num % 3 == 0:
+                base_response = selected_response.replace("필요합니다", "핵심 포인트로 정리됩니다")
+            else:
+                base_response = selected_response
+        
+        
+        return base_response
+    
+    def _generate_crewai_response(self, agent):
+        """CrewAI 에이전트를 사용하여 실제 AI 응답 생성"""
+        from crewai import Task, Crew
+        
+        # 현재 토론 상황 컨텍스트 구성
+        topic = getattr(self, 'current_topic', '새로운 프로젝트')
+        
+        # 최근 대화 내용 가져오기 (마지막 3개 메시지)
+        recent_messages = []
+        if len(self.chat_history) > 0:
+            recent_messages = self.chat_history[-3:]
+            context_messages = "\n".join([f"{msg.sender}: {msg.content}" for msg in recent_messages])
+        else:
+            context_messages = "토론이 시작되었습니다."
+        
+        # 회사 정보 컨텍스트
+        company_context = ""
+        if hasattr(self, 'context') and self.context:
+            company_context = f"""
+회사 정보:
+- 규모: {self.context.get('company_size', '정보 없음')}
+- 업종: {self.context.get('industry', '정보 없음')}  
+- 매출: {self.context.get('revenue', '정보 없음')}
+- 현재 과제: {self.context.get('current_challenge', '정보 없음')}
+"""
+        
+        # 간단하고 명확한 프롬프트로 수정
+        task_description = f"""
+{agent.role}의 전문성을 바탕으로 다음 주제에 대한 의견을 2-3문장으로 간단히 제시하세요:
+
+주제: {topic}
+{company_context}
+
+최근 논의: {context_messages}
+
+{agent.role}의 관점에서 구체적이고 실무적인 의견을 제시해주세요.
+"""
+
+        try:
+            # Task 생성
+            task = Task(
+                description=task_description,
+                agent=agent,
+                expected_output="전문가 관점의 간결한 의견 (2-3문장)"
+            )
+            
+            # Crew를 통해 실행
+            crew = Crew(
+                agents=[agent],
+                tasks=[task],
+                verbose=False
+            )
+            
+            result = crew.kickoff()
+            
+            # 결과 처리
+            if hasattr(result, 'raw'):
+                response = result.raw
+            elif isinstance(result, str):
+                response = result
+            else:
+                response = str(result)
+            
+            # "Final Answer:" 부분 제거
+            if "Final Answer:" in response:
+                response = response.split("Final Answer:")[-1].strip()
+            
+            # 너무 긴 응답은 자르기
+            if len(response) > 300:
+                sentences = response.split('.')
+                response = '. '.join(sentences[:3]) + '.'
+            
+            response = response.strip()
+            if not response:
+                raise ValueError("빈 응답")
+                
+            return response
+                
+        except Exception as e:
+            print(f"⚠️ CrewAI 응답 생성 실패 ({agent.role}): {e}")
+            # 폴백으로 기존 템플릿 응답 사용
+            return self._generate_role_specific_response(agent)
 
 def main():
     """메인 함수 - 간단한 데모"""

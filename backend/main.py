@@ -727,6 +727,51 @@ async def get_status():
     
     speaker_info = chat_system.get_current_speaker_info()
     
+    # 현재 활성 참석자 정보 생성
+    active_participants = []
+    if hasattr(chat_system, 'active_agents') and chat_system.active_agents:
+        for agent in chat_system.active_agents:
+            # 실제 agent.role에 따른 매핑 (한국어 역할명 기준)
+            if "디자인" in agent.role:
+                participant = {
+                    "emoji": "🎨",
+                    "name": "김창의",
+                    "role": "디자인 전문가"
+                }
+            elif "영업" in agent.role:
+                participant = {
+                    "emoji": "💼", 
+                    "name": "박매출",
+                    "role": "영업 전문가"
+                }
+            elif "생산" in agent.role:
+                participant = {
+                    "emoji": "⚙️",
+                    "name": "이현실", 
+                    "role": "생산 전문가"
+                }
+            elif "마케팅" in agent.role:
+                participant = {
+                    "emoji": "📢",
+                    "name": "최홍보",
+                    "role": "마케팅 전문가"
+                }
+            elif "IT" in agent.role:
+                participant = {
+                    "emoji": "💻",
+                    "name": "박테크",
+                    "role": "IT 전문가"
+                }
+            else:
+                # 알 수 없는 역할의 경우
+                participant = {
+                    "emoji": "👤",
+                    "name": agent.role,
+                    "role": agent.role
+                }
+            
+            active_participants.append(participant)
+    
     return {
         "discussion_started": True,
         "auto_discussion_enabled": chat_system.auto_discussion_enabled,
@@ -737,7 +782,8 @@ async def get_status():
         "total_messages": len(chat_system.chat_history),
         "current_room_id": current_room_id,
         "websocket_connected": has_connections,
-        "connection_count": connection_count
+        "connection_count": connection_count,
+        "active_participants": active_participants
     }
 
 # 메모리 시스템 API 엔드포인트들

@@ -137,7 +137,8 @@ function App() {
             discussionState: statusData.discussion_state,
             discussionRounds: statusData.discussion_rounds,
             currentSpeaker: statusData.current_speaker || prev.currentSpeaker,
-            totalMessages: statusData.total_messages
+            totalMessages: statusData.total_messages,
+            activeParticipants: statusData.active_participants || prev.activeParticipants
           }));
         }
       } catch (error) {
@@ -212,7 +213,8 @@ function App() {
                     discussionState: statusData.discussion_state,
                     discussionRounds: statusData.discussion_rounds,
                     currentSpeaker: statusData.current_speaker || prev.currentSpeaker,
-                    totalMessages: statusData.total_messages
+                    totalMessages: statusData.total_messages,
+                    activeParticipants: statusData.active_participants || prev.activeParticipants
                   }));
                 }
               } catch (error) {
@@ -310,7 +312,8 @@ function App() {
       autoDiscussionEnabled: false,
       userInterventionPending: false,
       discussionState: 'ready',
-      currentSpeaker: { name: '', isTyping: false }
+      currentSpeaker: { name: '', isTyping: false },
+      activeParticipants: []
     }));
   };
 
@@ -325,7 +328,8 @@ function App() {
       discussionState: 'ready',
       discussionRounds: 0,
       currentSpeaker: { name: '', isTyping: false },
-      totalMessages: 0
+      totalMessages: 0,
+      activeParticipants: []
     });
   };
 

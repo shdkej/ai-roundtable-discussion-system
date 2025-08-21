@@ -275,7 +275,8 @@ const EmptyState = styled.div`
   font-style: italic;
 `;
 
-const experts = [
+// 기본 전문가 목록 (토론이 시작되지 않았을 때 사용)
+const defaultExperts = [
   { emoji: "🎨", name: "김창의", role: "디자인 전문가" },
   { emoji: "💼", name: "박매출", role: "영업 전문가" },
   { emoji: "⚙️", name: "이현실", role: "생산 전문가" },
@@ -393,7 +394,8 @@ function Sidebar({ status, onResetDiscussion, currentView, onViewChange, current
                 discussionState: statusData.discussion_state,
                 discussionRounds: statusData.discussion_rounds,
                 currentSpeaker: statusData.current_speaker || prev.currentSpeaker,
-                totalMessages: statusData.total_messages
+                totalMessages: statusData.total_messages,
+                activeParticipants: statusData.active_participants || prev.activeParticipants
               }));
               console.log('상태 업데이트 완료:', statusData);
             }
@@ -695,7 +697,10 @@ function Sidebar({ status, onResetDiscussion, currentView, onViewChange, current
           </SectionTitle>
           
           <ExpertList>
-            {experts.map((expert, index) => (
+            {(status.activeParticipants && status.activeParticipants.length > 0 
+              ? status.activeParticipants 
+              : defaultExperts
+            ).map((expert, index) => (
               <ExpertCard key={`${expert.name}-${index}`}>
                 <ExpertName>
                   {expert.emoji} {expert.name}

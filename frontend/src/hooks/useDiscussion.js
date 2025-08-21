@@ -8,7 +8,8 @@ export const useDiscussion = () => {
     discussionState: 'ready',
     discussionRounds: 0,
     currentSpeaker: { name: '', isTyping: false },
-    totalMessages: 0
+    totalMessages: 0,
+    activeParticipants: []
   });
 
   const addMessage = useCallback((message) => {

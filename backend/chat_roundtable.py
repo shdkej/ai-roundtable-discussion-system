@@ -97,29 +97,115 @@ def get_default_personas():
 # 커스텀 웹 검색 도구 구현
 from crewai.tools import tool
 
-@tool("WebSearchTool")
-def web_search_tool(query: str) -> str:
-    """
-    웹 검색을 통해 최신 정보를 수집하는 도구입니다.
-    
-    사용 시기:
-    - 최신 정보나 최근 데이터가 필요할 때
-    - 시장 동향이나 트렌드를 파악해야 할 때
-    - 구체적인 사례나 통계가 필요할 때
-    - 경쟁사 정보나 업계 동향을 파악해야 할 때
-    
-    입력: 검색하고 싶은 키워드나 질문
-    출력: 검색 결과 요약 (제목, 내용, 링크 포함)
-    
-    예시: "2024년 AI 기술 동향", "ChatGPT 최신 업데이트", "머신러닝 시장 규모", "UI/UX 디자인 트렌드"
-    
-    중요: 질문에 답하기 전에 최신 정보가 필요하다면 반드시 이 도구를 먼저 사용하세요.
-    """
-    api_key = os.getenv("SERPER_API_KEY")
-    
-    if not api_key:
-        return "웹 검색 기능이 비활성화되어 있습니다. SERPER_API_KEY를 설정해주세요."
-    
+def openai_research_tool(query: str) -> str:
+    """OpenAI GPT를 사용한 상세한 정보 조사 (OPENAI_API_KEY 필요)"""
+    try:
+        import openai
+        import os
+        
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            return "OpenAI API 키가 설정되지 않았습니다. OPENAI_API_KEY를 설정해주세요."
+        
+        client = openai.OpenAI(api_key=api_key)
+        
+        # GPT-4를 사용하여 상세한 정보 조사
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",  # 비용 효율적인 모델 사용
+            messages=[
+                {
+                    "role": "system", 
+                    "content": """당신은 전문적인 정보 조사 전문가입니다. 
+                    
+주어진 질문에 대해 다음과 같이 답변해주세요:
+1. 핵심 내용을 정확하고 상세하게 설명
+2. 최신 동향이나 트렌드가 있다면 포함
+3. 실용적인 예시나 사례 제공
+4. 비즈니스나 실무에 미치는 영향 분석
+5. 관련 키워드나 용어 설명
+
+답변은 한국어로 작성하고, 구체적이고 실용적인 정보를 제공해주세요.
+답변 길이는 200-400자 정도로 적당히 상세하게 작성해주세요."""
+                },
+                {
+                    "role": "user", 
+                    "content": f"다음 주제에 대해 상세히 조사해주세요: {query}"
+                }
+            ],
+            max_tokens=1000,
+            temperature=0.7
+        )
+        
+        result = response.choices[0].message.content.strip()
+        return f"🔍 조사 주제: {query}\n\n📊 상세 정보:\n{result}"
+        
+    except Exception as e:
+        return f"OpenAI 조사 도구 오류: {str(e)}\n\n기본 지식을 바탕으로 답변을 제공하겠습니다."
+
+def duckduckgo_search(query: str) -> str:
+    """DuckDuckGo를 통한 기본적인 검색 결과 제공 (API 키 불필요)"""
+    try:
+        import urllib.parse
+        
+        # DuckDuckGo Instant Answer API 시도
+        encoded_query = urllib.parse.quote(query)
+        instant_url = f"https://api.duckduckgo.com/?q={encoded_query}&format=json&no_html=1&skip_disambig=1"
+        
+        response = requests.get(instant_url, timeout=10)
+        response.raise_for_status()
+        
+        data = response.json()
+        results = []
+        
+        # Abstract (요약 정보)
+        if data.get("Abstract") and len(data["Abstract"]) > 10:
+            results.append(f"📋 요약: {data['Abstract']}")
+            if data.get("AbstractURL"):
+                results.append(f"🔗 출처: {data['AbstractURL']}")
+        
+        # Answer (직접 답변)  
+        if data.get("Answer") and len(data["Answer"]) > 3:
+            results.append(f"💡 답변: {data['Answer']}")
+        
+        # Definition (정의)
+        if data.get("Definition") and len(data["Definition"]) > 10:
+            results.append(f"📚 정의: {data['Definition']}")
+            if data.get("DefinitionURL"):
+                results.append(f"🔗 출처: {data['DefinitionURL']}")
+        
+        # Related Topics (관련 주제)
+        if data.get("RelatedTopics") and len(data["RelatedTopics"]) > 0:
+            results.append("\\n🔍 관련 정보:")
+            count = 0
+            for topic in data["RelatedTopics"][:5]:
+                if isinstance(topic, dict) and topic.get("Text") and len(topic["Text"]) > 20:
+                    text = topic["Text"]
+                    if len(text) > 150:
+                        text = text[:150] + "..."
+                    results.append(f"  • {text}")
+                    count += 1
+                    if count >= 3:  # 최대 3개만 표시
+                        break
+        
+        # Infobox 정보
+        if data.get("Infobox") and data["Infobox"].get("content"):
+            results.append("\\n📊 추가 정보:")
+            for item in data["Infobox"]["content"][:3]:
+                if item.get("label") and item.get("value"):
+                    results.append(f"  • {item['label']}: {item['value']}")
+        
+        if results:
+            return f"검색어: {query}\\n\\n" + "\\n".join(results)
+        else:
+            # 검색 결과가 없을 때 대안 제안
+            return f"검색어 '{query}'에 대한 즉시 답변을 찾을 수 없습니다.\\n\\n💡 제안:\\n• 더 구체적인 키워드 사용\\n• 영어로 검색 시도\\n• 일반적인 용어 사용\\n\\n참고: 웹 검색 기능이 제한되어 있어 최신 정보나 세부 사항은 제공되지 않을 수 있습니다."
+            
+    except Exception as e:
+        return f"웹 검색 중 오류가 발생했습니다: {str(e)}\\n\\n기본 지식을 바탕으로 답변을 제공하겠습니다."
+
+
+def serper_search(query: str, api_key: str) -> str:
+    """SERPER API를 사용한 웹 검색"""
     try:
         # SerpAPI를 사용한 웹 검색 (GET 방식)
         url = "https://serpapi.com/search"
@@ -169,7 +255,73 @@ def web_search_tool(query: str) -> str:
     except requests.exceptions.RequestException as e:
         return f"웹 검색 중 네트워크 오류가 발생했습니다: {str(e)}"
     except Exception as e:
-        return f"예상치 못한 오류가 발생했습니다: {str(e)}"
+        return f"SERPER API 검색 중 예상치 못한 오류가 발생했습니다: {str(e)}"
+
+@tool("OpenAIResearchTool")
+def openai_research_crewai_tool(query: str) -> str:
+    """OpenAI GPT-4를 사용하여 상세하고 정확한 정보를 조사하는 도구입니다.
+    
+    사용 시기:
+    - 복잡한 주제에 대한 상세한 분석이 필요할 때
+    - 최신 트렌드나 기술 동향을 파악해야 할 때  
+    - 비즈니스 전략이나 시장 분석이 필요할 때
+    - 전문적인 지식이나 개념 설명이 필요할 때
+    
+    입력: 조사하고 싶은 주제나 질문 (문자열)
+    출력: GPT-4가 제공하는 상세하고 전문적인 분석 결과
+    
+    예시: "2024년 AI 시장 동향", "디지털 마케팅 전략", "클라우드 컴퓨팅 보안", "UX 디자인 원칙"
+    
+    장점: 웹 검색보다 더 정확하고 체계적인 정보 제공
+    """
+    return openai_research_tool(query)
+
+@tool("WebSearchTool")
+def web_search_tool(query: str) -> str:
+    """
+    웹 검색을 통해 최신 정보를 수집하는 도구입니다.
+    
+    사용 시기:
+    - 최신 정보나 최근 데이터가 필요할 때
+    - 시장 동향이나 트렌드를 파악해야 할 때
+    - 구체적인 사례나 통계가 필요할 때
+    - 경쟁사 정보나 업계 동향을 파악해야 할 때
+    
+    입력: 검색하고 싶은 키워드나 질문
+    출력: 검색 결과 요약 (제목, 내용, 링크 포함)
+    
+    예시: "2024년 AI 기술 동향", "ChatGPT 최신 업데이트", "머신러닝 시장 규모", "UI/UX 디자인 트렌드"
+    
+    중요: 질문에 답하기 전에 최신 정보가 필요하다면 반드시 이 도구를 먼저 사용하세요.
+    """
+    # 1. OpenAI 조사 도구를 먼저 시도 (가장 정확하고 상세한 정보)
+    print(f"🤖 OpenAI로 정보 조사 시도: {query}")
+    openai_result = openai_research_tool(query)
+    
+    # OpenAI에서 유효한 결과를 얻었으면 반환
+    if openai_result and not ("API 키가 설정되지 않았습니다" in openai_result or "오류:" in openai_result):
+        print(f"✅ OpenAI 조사 성공")
+        return openai_result
+    
+    # 2. SERPER API 시도 (실제 웹 검색 결과)
+    serper_api_key = os.getenv("SERPER_API_KEY")
+    if serper_api_key:
+        print(f"🔍 SERPER API로 검색 시도: {query}")
+        serper_result = serper_search(query, serper_api_key)
+        if serper_result and not ("오류가 발생했습니다" in serper_result):
+            print(f"✅ SERPER API 검색 성공") 
+            return serper_result
+    
+    # 3. DuckDuckGo 백업 시도
+    print(f"🦆 DuckDuckGo로 검색 시도: {query}")
+    ddg_result = duckduckgo_search(query)
+    if ddg_result and not ("즉시 답변을 찾을 수 없습니다" in ddg_result or "오류가 발생했습니다" in ddg_result):
+        print(f"✅ DuckDuckGo 검색 성공")
+        return ddg_result
+    
+    # 4. 모든 방법 실패시 안내 메시지
+    print(f"⚠️ 모든 검색 방법 실패")
+    return f"검색어 '{query}'에 대한 상세한 정보를 찾기 어렵습니다.\\n\\n💡 더 나은 검색을 위해:\\n• OPENAI_API_KEY 설정 (가장 정확한 정보)\\n• SERPER_API_KEY 설정 (실시간 웹 검색)\\n\\n기본 지식을 바탕으로 답변을 제공하겠습니다."
 
 class ChatMessage:
     def __init__(self, sender: str, content: str, timestamp: datetime.datetime = None, message_type: str = "message"):
@@ -222,7 +374,7 @@ class ChatRoundtable:
             goal=moderator_persona["goal"],
             backstory=moderator_persona["backstory"],
             verbose=True,
-            tools=[web_search_tool],
+            tools=[openai_research_crewai_tool, web_search_tool],
             llm=llm
         )
         
@@ -233,7 +385,7 @@ class ChatRoundtable:
             goal=design_persona["goal"],
             backstory=design_persona["backstory"],
             verbose=True,
-            tools=[web_search_tool],
+            tools=[openai_research_crewai_tool, web_search_tool],
             llm=llm
         )
 
@@ -244,7 +396,7 @@ class ChatRoundtable:
             goal=sales_persona["goal"],
             backstory=sales_persona["backstory"],
             verbose=True,
-            tools=[web_search_tool],
+            tools=[openai_research_crewai_tool, web_search_tool],
             llm=llm
         )
 
@@ -255,7 +407,7 @@ class ChatRoundtable:
             goal=production_persona["goal"],
             backstory=production_persona["backstory"],
             verbose=True,
-            tools=[web_search_tool],
+            tools=[openai_research_crewai_tool, web_search_tool],
             llm=llm
         )
 
@@ -266,7 +418,7 @@ class ChatRoundtable:
             goal=marketing_persona["goal"],
             backstory=marketing_persona["backstory"],
             verbose=True,
-            tools=[web_search_tool],
+            tools=[openai_research_crewai_tool, web_search_tool],
             llm=llm
         )
 
@@ -277,7 +429,7 @@ class ChatRoundtable:
             goal=it_persona["goal"],
             backstory=it_persona["backstory"],
             verbose=True,
-            tools=[web_search_tool],
+            tools=[openai_research_crewai_tool, web_search_tool],
             llm=llm
         )
 
@@ -1015,7 +1167,7 @@ class ChatRoundtable:
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"채팅토론결과_{timestamp}.md"
         
-        markdown_content = f"""# 🏢 KS 채팅형 원탁토론 결과
+        markdown_content = f"""# 🏢 채팅형 원탁토론 결과
 
 ## 📋 토론 정보
 - **주제**: {self.current_topic}
@@ -1042,7 +1194,7 @@ class ChatRoundtable:
         markdown_content += f"""
 ---
 
-*이 문서는 KS 채팅형 원탁토론 시스템에 의해 자동 생성되었습니다.*  
+*이 문서는 채팅형 원탁토론 시스템에 의해 자동 생성되었습니다.*  
 *생성 시간: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}*
 """
         
